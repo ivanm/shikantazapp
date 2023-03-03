@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 
+console.log(process.env.NODE_ENV);
 export default defineConfig({
   server: {
     port: 3000,
