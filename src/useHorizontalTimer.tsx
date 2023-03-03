@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
 
+type WakeLockType = "screen";
+export interface WakeLockSentinel extends EventTarget {
+  type: WakeLockType;
+  released: boolean;
+  release: () => Promise<void>;
+}
 const useHorizontalTimer = () => {
   const [isHorizontal, setIsHorizontal] = useState(false);
   const [horizontalTime, setHorizontalTime] = useState(0);
@@ -14,34 +20,45 @@ const useHorizontalTimer = () => {
     beta: null,
     gamma: null,
   });
-  let timerId: NodeJS.Timeout | null = null;
+  const [timerId, setTimerId] = useState<NodeJS.Timeout | null>(null);
+  const [wakeLock, setWakeLock] = useState<WakeLockSentinel | null>(null);
 
   useEffect(() => {
     const handleOrientation = (event: DeviceOrientationEvent) => {
+      setEventOrientation({
+        absolute: event.absolute,
+        alpha: event.alpha,
+        beta: event.beta,
+        gamma: event.gamma,
+      });
+
       // Check if the device is in landscape orientation and is not being tilted
       if (
         event != null &&
         event.gamma != null &&
         event.beta != null &&
         Math.abs(event.gamma) < 5 &&
-        Math.abs(event.beta) > 175 &&
-        Math.abs(event.beta) < 185
+        Math.abs(event.beta - 2.5) < 5
       ) {
-        setEventOrientation({
-          absolute: event.absolute,
-          alpha: event.alpha,
-          beta: event.beta,
-          gamma: event.gamma,
-        });
         // If the device was not previously in a horizontal position, start the timer
         if (!isHorizontal) {
           setIsHorizontal(true);
-          timerId = setInterval(() => {
-            setHorizontalTime((time) => time + 1);
-            console.log(
-              `Device has been in a horizontal position for ${horizontalTime} seconds`
-            );
-          }, 1000);
+          setTimerId(
+            setInterval(() => {
+              setHorizontalTime((time) => time + 1);
+            }, 1000)
+          );
+          // Request a wake lock to prevent the device from sleeping
+          if (navigator) {
+            (async () => {
+              const lock: WakeLockSentinel = await navigator.wakeLock.request(
+                "screen"
+              );
+              // .then((lock: WakeLockSentinel) => {
+              setWakeLock(lock);
+            })();
+            // });
+          }
         }
       } else {
         // If the device was previously in a horizontal position, stop the timer
@@ -49,24 +66,32 @@ const useHorizontalTimer = () => {
           setIsHorizontal(false);
           if (timerId) {
             clearInterval(timerId);
-            timerId = null;
+            setTimerId(null);
           }
-          console.log("Device is no longer in a horizontal position");
+          if (wakeLock) {
+            wakeLock.release();
+            setWakeLock(null);
+          }
         }
+        // Reset the timer
         setHorizontalTime(0);
       }
     };
 
-    window.addEventListener("deviceorientation", handleOrientation, true);
+    window.addEventListener("deviceorientation", handleOrientation);
 
     return () => {
       window.removeEventListener("deviceorientation", handleOrientation);
       if (timerId) {
         clearInterval(timerId);
-        timerId = null;
+        setTimerId(null);
+      }
+      if (wakeLock) {
+        wakeLock.release();
+        setWakeLock(null);
       }
     };
-  }, [isHorizontal, horizontalTime]);
+  }, [isHorizontal, timerId]);
 
   return { horizontalTime, isHorizontal, eventOrientation };
 };
