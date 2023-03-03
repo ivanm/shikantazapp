@@ -9,4 +9,6 @@ export default defineConfig({
     host: true,
   },
   plugins: [react(), basicSsl()],
+  base:
+    process.env.NODE_ENV === "production" ? "/shikantazapp/" : undefined,
 });
